@@ -1,0 +1,174 @@
+---
+title: "Mini Project - R For Health Sciences Workshop"
+author: "George K Agyen (GhanaR-User COmmunity)"
+format: 
+  html:
+    toc: true
+editor: visual
+---
+
+## Analysing COVID-19 Testing Data
+
+![Corona Virus (SARS-CoV-2)](images/clipboard-536200076.png){#fig-covid fig-align="center" width="353"}
+
+The covid 19 pandemic - caused by the "severe acute respiratory syndrome corona-virus 2"-, declared a global crisis by WHO (world health organisation) in March 2020, profoundly impacted communities worldwide. Although vaccines have been developed to counter the virus' action, it is still considered a pandemic till date. It is therefore critical to understand its dynamics, and assessing testing strategies becomes vital for effective public health management.
+
+In this project we delve into the rich landscape of COVID-19 testing data. By analysing demographic, clinical, and laboratory variables, we aim to reveal patterns, identify risk factors and enhance our understanding of the disease. Through data driven insights, we hope to contribute to better decision making, resource allocation and targeted interventions
+
+## Loading The Data for Analysis
+
+For this work we use the `covid_testing` dataset found in the `medicaldata` package. More information on the data can be found [here](https://htmlpreview.github.io/?https://github.com/higgi13425/medicaldata/blob/master/man/description_docs/covid_desc.html). All the variables in the dataset are also defined on this page: [Variables description for covid_testing data](https://htmlpreview.github.io/?https://github.com/higgi13425/medicaldata/blob/master/man/codebooks/covid_testing_codebook.html) . You can also type `help(covid_testing)` for locally stored information on the data in RStudio
+
+``` r
+# Install medicaldata package if you have not
+install.packages("medicaldata")   #this is done only once
+```
+
+```{r}
+#| message: false
+#| warning: false
+library(medicaldata) #load the medical data package
+library(dplyr) # to change data to tibble
+
+data("covid_testing")
+covid_testing <- as_tibble(covid_testing)   # I prefer to have my data as a tibble
+```
+
+## Exploring the Data
+
+We can now check how the data looks like, the structure and dimensions, Identify some key variables and check for missing values.
+
+```{r}
+library(skimr) # to summarise data in a tabular form
+
+head(covid_testing) # check few rows from top of data
+glimpse(covid_testing) # check structure
+skim(covid_testing) # summarise data in a tabular form
+
+# look at some key variables in data
+unique(covid_testing$result)  # test results
+unique(covid_testing$demo_group) # demographics of tested groups
+unique(covid_testing$payor_group) # payor groups
+unique(covid_testing$test_id) # type of test performed
+unique(covid_testing$patient_class) # patients' classifications
+
+# check for missing values
+sum(is.na(covid_testing)) # total missing values
+colSums(is.na(covid_testing)) # missing values by column
+```
+
+From our exploration we clearly see how the data is structured. There are a total of **15524 observations**, which is the number of tests conducted (number of rows) and **17 variables** (number of columns) of which **9 are character** type and **8 are numeric** type. The search also reveals some missing values in our data. A total of **14373** missing values are identified, **7087** are under the **`payor_group`** variable, 7077 under the **`patient_class`** variable and **209** under the **`ct_result`** variable. We also take a look at some key variables (character) and their unique observational values, for instance the **`result`** variable has 3 unique observations; `positive`, `negative` and `invalid`
+
+## Cleaning the Data
+
+For the cleaning we shall only look at the `result` column. We want to filter out all results with an `invalid` observation or outcome. We can additionally deal with the missing values by making some imputations but that is beyond the scope of this lesson. So we leave the missing values as they are for now.
+
+```{r}
+# filter out invalid test results using dplyr filter
+covid_test_clean <- covid_testing |> filter(result != "invalid")
+head(covid_test_clean) # top few rows of cleaned data
+```
+
+The code above is filtering all the data on the condition where the result variable **is not** `invalid`. The "`!=`" sign means **not equal.**
+
+## Manipulating the Data using `dplyr` Functions
+
+To uncover some insights to help our visualisation. We need to do some manipulations on our data to help make certain patterns seem clearer and easily understood. We shall filter the data to focus on some specific groups (character variables) and make summary calculations (on the numeric variables) based on these groups.
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyr) # for tidying data
+
+# Group by demo group and calculate average ct_result for positive cases
+positive_cases_demo <- covid_test_clean |> filter(result == 'positive') |> 
+                        group_by(demo_group) |> 
+                        summarise(avg_ct_result = mean(ct_result, na.rm = TRUE))
+print(positive_cases_demo)
+
+# Group by demo groups and summarise positivity rate
+demo_summary <- covid_test_clean |> 
+  group_by(demo_group) |> 
+  summarise(total_tests = n(),
+            positive_tests = sum(result == "positive"),
+            positivity_rate = round(positive_tests/total_tests, 2))
+print(demo_summary)
+
+# Summarize average turnaround times for different patient classes
+turnaround_times <- covid_test_clean |> 
+  group_by(patient_class) |>  drop_na() |> 
+  summarise(avg_col_rec_tat = mean(col_rec_tat, na.rm = TRUE),
+            avg_rec_ver_tat = mean(rec_ver_tat, na.rm = TRUE))
+print(turnaround_times)
+
+# Calculate average ct_result for positive cases
+average_ct_result <- covid_test_clean |> 
+  filter(result == "positive") |> 
+  summarise(average_ct = mean(ct_result, na.rm=T))
+print(average_ct_result)
+```
+
+These manipulations gives us some insight into our data which can instigate further statistical analysis to determine some association and correlations within the data for decision making. We can further visualise the data to view these perceptions clearly in a plot.
+
+## Making Visualisations with the Data
+
+We can make plots like bar chats, line plots, box plots and various others with our data to further enhance our perceptions about our data.
+
+```{r}
+#| message: false
+#| warning: false
+library(ggplot2) # load package for visualisation
+
+# bar plot of positivity rate v demo group
+ggplot(data = demo_summary, aes(x = demo_group, y = positivity_rate)) +
+  geom_col(fill = "turquoise", colour = 'black') +
+  labs(title = "Positivity Rate by Demographic Group",
+       x = "Demographic Group",
+       y = "Positivity Rate") +
+  theme_bw()
+
+# A scatter plot of turnaround times by patient class
+ggplot(turnaround_times, aes(x = avg_col_rec_tat, y = avg_rec_ver_tat, color = patient_class)) +
+  geom_point(size = 3, show.legend = F) +
+  labs(x = "Avg Collection to Receipt Time", y = "Avg Receipt to Verification Time",title = "Turnaround Times for Different Patient Classes") +
+  theme_bw()
+
+# A histogram showing the distribution of cycle threshold for positive cases
+covid_test_clean |> filter(result == "positive" & !is.na(ct_result)) |> 
+  ggplot(aes(x = ct_result)) +
+  geom_histogram(binwidth = 1.5, fill = "orange", colour = 'black') +
+  labs(title="Cycle Threshold DIstribution",
+       x="Cycle threshold (ct_result)",
+       y="Count") +
+  theme_classic()
+
+# A line trend of postive cases over the days of testing 
+ggplot(covid_test_clean %>% filter(result == "positive"), aes(x = pan_day)) +
+  geom_line(stat = 'count', colour = 'navy') +
+  labs(title = "Trend of Positive COVID-19 Cases Over Time",
+       x = "Collection Date",
+       y = "Count of Positive Results") +
+  theme_classic()
+
+# A box plot to show the distribution of ages in different demo groups
+ggplot(covid_test_clean %>% filter(result == "positive"), aes(x = demo_group, y = age)) +
+  geom_boxplot(aes(fill = demo_group), show.legend = F) +
+  labs(title = "Distribution of Ages (ct_result) by Demographic Group",
+       x = "Demographic Group",
+       y = "Age") +
+  theme_bw()
+```
+
+The above visualisations gives us a clear picture into the dynamics of how the various variables are interacting with each other and distinctly communicate these insights from the data.
+
+......
+
+## Conclusion
+
+To conclude, this mini project has allowed us to:
+
+-   Practice real-world data analysis with a COVID-19 testing data set.
+
+-   Explore patterns in COVID-19 testing results data.
+
+-   Create meaningful visualizations to communicate findings.
